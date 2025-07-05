@@ -6,7 +6,7 @@
     <string>com.user.humidity-daemon</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/node</string>
+        <string>/Users/smsms/.nvm/versions/node/v21.6.2/bin/node</string>
         <string>/Users/smsms/japes/humidity-daemon/dist/index.js</string>
     </array>
     <key>WorkingDirectory</key>

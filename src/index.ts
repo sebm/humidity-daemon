@@ -1,62 +1,58 @@
-import * as cron from 'node-cron';
+import { HttpFunction } from '@google-cloud/functions-framework/build/src/functions';
 import { config, validateConfig } from './config';
 import { HumidityMonitor } from './humidity-monitor';
 
-class HumidityDaemon {
-  private monitor: HumidityMonitor;
-  private cronJob: cron.ScheduledTask | null = null;
-
-  constructor() {
-    this.monitor = new HumidityMonitor(config);
-  }
-
-  async start(): Promise<void> {
-    console.log('Starting Humidity Daemon...');
-    
+export const humidityMonitor: HttpFunction = async (req, res) => {
+  console.log('Humidity monitoring function triggered');
+  
+  try {
+    // Validate configuration
     const configErrors = validateConfig();
     if (configErrors.length > 0) {
-      console.error('Configuration errors:');
-      configErrors.forEach(error => console.error(`  - ${error}`));
-      process.exit(1);
+      console.error('Configuration errors:', configErrors);
+      res.status(500).json({
+        error: 'Configuration error',
+        details: configErrors
+      });
+      return;
     }
 
-    console.log(`Humidity threshold: ${config.humidityThreshold}%`);
-    console.log(`Check interval: ${config.checkIntervalMinutes} minutes`);
-    console.log(`Notifications: ${config.enableNotifications ? 'enabled' : 'disabled'}`);
-
-    const connected = await this.monitor.testConnection();
+    // Create monitor instance
+    const monitor = new HumidityMonitor(config);
+    
+    // Test connection first
+    const connected = await monitor.testConnection();
     if (!connected) {
-      console.error('Failed to connect to Nest API. Please check your configuration.');
-      process.exit(1);
+      console.error('Failed to connect to Nest API');
+      res.status(500).json({
+        error: 'Failed to connect to Nest API',
+        details: 'Please check your Nest API credentials and configuration'
+      });
+      return;
     }
 
-    const cronPattern = `*/${config.checkIntervalMinutes} * * * *`;
-    this.cronJob = cron.schedule(cronPattern, async () => {
-      await this.monitor.checkHumidity();
+    // Check for reset parameter (for testing)
+    if (req.query.reset === 'true') {
+      console.log('Resetting alert states for testing...');
+      await monitor.resetAlertStates();
+    }
+
+    // Perform humidity check
+    await monitor.checkHumidity();
+    
+    console.log('Humidity check completed successfully');
+    res.status(200).json({
+      success: true,
+      message: 'Humidity check completed',
+      timestamp: new Date().toISOString(),
+      threshold: config.humidityThreshold
     });
 
-    console.log(`Daemon started. Monitoring every ${config.checkIntervalMinutes} minutes.`);
-    console.log('Press Ctrl+C to stop.');
-
-    process.on('SIGINT', () => this.stop());
-    process.on('SIGTERM', () => this.stop());
+  } catch (error) {
+    console.error('Function execution failed:', error);
+    res.status(500).json({
+      error: 'Function execution failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
-
-  private stop(): void {
-    console.log('\nStopping Humidity Daemon...');
-    
-    if (this.cronJob) {
-      this.cronJob.stop();
-      this.cronJob = null;
-    }
-    
-    console.log('Daemon stopped.');
-    process.exit(0);
-  }
-}
-
-const daemon = new HumidityDaemon();
-daemon.start().catch(error => {
-  console.error('Failed to start daemon:', error);
-  process.exit(1);
-});
+};

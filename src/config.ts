@@ -10,7 +10,9 @@ export const config: DaemonConfig = {
   nestProjectId: process.env.NEST_PROJECT_ID || '',
   humidityThreshold: parseInt(process.env.HUMIDITY_THRESHOLD || '60'),
   checkIntervalMinutes: parseInt(process.env.CHECK_INTERVAL_MINUTES || '5'),
-  enableNotifications: process.env.ENABLE_NOTIFICATIONS === 'true'
+  enableNotifications: process.env.ENABLE_NOTIFICATIONS === 'true',
+  pagerDutyIntegrationKey: process.env.PAGERDUTY_INTEGRATION_KEY || '',
+  pagerDutySeverity: (process.env.PAGERDUTY_SEVERITY as 'info' | 'warning' | 'error' | 'critical') || 'error'
 };
 
 export function validateConfig(): string[] {
@@ -27,6 +29,10 @@ export function validateConfig(): string[] {
   
   if (config.checkIntervalMinutes < 1) {
     errors.push('CHECK_INTERVAL_MINUTES must be at least 1');
+  }
+
+  if (config.enableNotifications && !config.pagerDutyIntegrationKey) {
+    errors.push('PAGERDUTY_INTEGRATION_KEY is required when notifications are enabled');
   }
   
   return errors;

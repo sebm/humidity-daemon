@@ -30,4 +30,6 @@ export interface DaemonConfig {
   humidityThreshold: number;
   checkIntervalMinutes: number;
   enableNotifications: boolean;
+  pagerDutyIntegrationKey: string;
+  pagerDutySeverity: 'info' | 'warning' | 'error' | 'critical';
 }

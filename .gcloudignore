@@ -1,0 +1,29 @@
+# Exclude files from Google Cloud deployment
+
+# Source files (we deploy the built version)
+src/
+tsconfig.json
+.eslintrc.js
+
+# Development files
+node_modules/
+.git/
+.gitignore
+
+# Local files
+.env
+.env.local
+*.log
+daemon.log
+daemon.error.log
+
+# macOS specific
+.DS_Store
+humidity-daemon.plist
+~/Library/
+
+# Documentation
+README.md
+
+# CI/CD
+.github/

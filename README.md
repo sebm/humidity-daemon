@@ -1,13 +1,15 @@
-# Humidity Daemon
+# Humidity Monitor
 
-A TypeScript daemon that monitors humidity levels via Google Nest Smart Device Management API and sends notifications when thresholds are exceeded.
+A serverless TypeScript function that monitors humidity levels via Google Nest Smart Device Management API and sends PagerDuty alerts when thresholds are exceeded. Runs on Google Cloud Functions for ~$0.50/month.
 
 ## Prerequisites
 
 - Node.js 18+ and npm
-- Google Cloud account
+- Google Cloud account with billing enabled
+- Google Cloud CLI (`gcloud`) installed
 - Google Nest Device Access account ($5 one-time fee)
 - Nest Thermostat with humidity sensor
+- PagerDuty account
 
 ## Setup
 
@@ -75,6 +77,10 @@ npm install
 
 ### 5. Configuration
 
+The project uses two configuration files:
+- `.env` - For local development and testing
+- `.env.yaml` - For Google Cloud Functions deployment
+
 1. Copy `.env.example` to `.env`:
    ```bash
    cp .env.example .env
@@ -89,49 +95,135 @@ npm install
    HUMIDITY_THRESHOLD=60
    CHECK_INTERVAL_MINUTES=5
    ENABLE_NOTIFICATIONS=true
+   PAGERDUTY_INTEGRATION_KEY=your_pagerduty_integration_key
+   PAGERDUTY_SEVERITY=error
    ```
 
-### 6. Build and Test
+### 6. PagerDuty Setup
 
+1. **Create PagerDuty Service:**
+   - Go to [PagerDuty](https://app.pagerduty.com)
+   - Create a new Service or use existing
+   - Add an "Events API v2" integration
+   - Copy the Integration Key
+
+2. **Configure Integration:**
+   - Set `PAGERDUTY_INTEGRATION_KEY` in your `.env`
+   - Choose severity level: `info`, `warning`, `error`, or `critical`
+
+### 7. Google Cloud Setup
+
+1. **Create Google Cloud Project** (if not using existing):
+   ```bash
+   gcloud projects create humidity-daemon --name="Humidity Monitor"
+   gcloud config set project humidity-daemon
+   ```
+
+2. **Enable required APIs**:
+   ```bash
+   gcloud services enable cloudfunctions.googleapis.com
+   gcloud services enable cloudscheduler.googleapis.com
+   gcloud services enable firestore.googleapis.com
+   ```
+
+3. **Create Firestore database**:
+   ```bash
+   gcloud firestore databases create --region=us-central1
+   ```
+
+### 8. Deploy to Google Cloud Functions
+
+1. **Build the project**:
+   ```bash
+   npm install
+   npm run build
+   ```
+
+2. **Configure environment variables**:
+   ```bash
+   cp .env.yaml.example .env.yaml
+   # Edit .env.yaml with your actual values
+   ```
+
+3. **Deploy the function**:
+   ```bash
+   gcloud functions deploy humidity-monitor \
+     --runtime nodejs20 \
+     --trigger-http \
+     --allow-unauthenticated \
+     --source . \
+     --entry-point humidityMonitor \
+     --memory 256MB \
+     --timeout 60s \
+     --env-vars-file .env.yaml
+   ```
+
+4. **Create Cloud Scheduler job** (every 5 minutes):
+   ```bash
+   gcloud scheduler jobs create http humidity-monitor-cron \
+     --schedule="*/5 * * * *" \
+     --uri="https://us-central1-humidity-daemon.cloudfunctions.net/humidity-monitor" \
+     --http-method=GET \
+     --location=us-central1
+   ```
+
+### 9. Test the Function
+
+**Manual test**:
 ```bash
-npm run build
-npm run dev
+gcloud functions call humidity-monitor
+```
+
+**HTTP test**:
+```bash
+curl "https://us-central1-humidity-daemon.cloudfunctions.net/humidity-monitor"
 ```
 
 ## Usage
 
-### Development
+### Local Development
 ```bash
+# Test the function locally
 npm run dev
+
+# Build for deployment
+npm run build
 ```
 
-### Production
+### Cloud Function Management
+
+**View logs**:
 ```bash
-npm start
+gcloud functions logs read humidity-monitor --limit=50
 ```
 
-### As macOS Service
+**Update function**:
+```bash
+npm run build
+npm run deploy
+```
 
-1. **Install service:**
-   ```bash
-   cp humidity-daemon.plist ~/Library/LaunchAgents/
-   launchctl load ~/Library/LaunchAgents/humidity-daemon.plist
-   ```
+**View scheduler status**:
+```bash
+gcloud scheduler jobs list
+gcloud scheduler jobs describe humidity-monitor-cron
+```
 
-2. **Control service:**
-   ```bash
-   # Start
-   launchctl start com.user.humidity-daemon
-   
-   # Stop
-   launchctl stop com.user.humidity-daemon
-   
-   # Check status
-   launchctl list | grep humidity-daemon
-   
-   # Uninstall
-   launchctl unload ~/Library/LaunchAgents/humidity-daemon.plist
-   ```
+**Pause/resume monitoring**:
+```bash
+# Pause
+gcloud scheduler jobs pause humidity-monitor-cron
+
+# Resume
+gcloud scheduler jobs resume humidity-monitor-cron
+```
+
+### Cost Monitoring
+
+Monitor your costs in the [Google Cloud Console](https://console.cloud.google.com/billing):
+- **Cloud Functions**: ~$0.40/month for 8,760 executions
+- **Firestore**: Free tier (1GB storage, 20K writes/day)
+- **Cloud Scheduler**: $0.10/month per job
 
 ## Configuration Options
 
@@ -142,28 +234,35 @@ npm start
 - `HUMIDITY_THRESHOLD`: Humidity percentage threshold (default: 60)
 - `CHECK_INTERVAL_MINUTES`: Check frequency in minutes (default: 5)
 - `ENABLE_NOTIFICATIONS`: Enable/disable alert notifications (default: true)
+- `PAGERDUTY_INTEGRATION_KEY`: PagerDuty Events API v2 integration key
+- `PAGERDUTY_SEVERITY`: Alert severity level (info, warning, error, critical)
 
 ## Features
 
-- ✅ Monitors Nest Thermostat humidity levels
-- ✅ Configurable humidity threshold alerts
-- ✅ 30-minute alert cooldown to prevent spam
-- ✅ Automatic OAuth token refresh
-- ✅ macOS LaunchAgent support
-- ✅ TypeScript with full type safety
+- ✅ **Serverless monitoring** - Runs on Google Cloud Functions
+- ✅ **Cost effective** - ~$0.50/month total cost
+- ✅ **PagerDuty integration** - Real-time alerting with auto-resolution
+- ✅ **Persistent state** - Firestore for alert tracking across executions
+- ✅ **Configurable thresholds** - Set custom humidity levels
+- ✅ **Alert cooldown** - 30-minute cooldown prevents spam
+- ✅ **Automatic OAuth refresh** - Handles Nest API authentication
+- ✅ **Scheduled execution** - Cloud Scheduler triggers every 5 minutes
+- ✅ **TypeScript** - Full type safety and modern development
 
-## Logs
+## Architecture
 
-Service logs are written to:
-- `daemon.log` - Standard output
-- `daemon.error.log` - Error output
+```
+Cloud Scheduler (every 5 min) → Cloud Function → Nest API → PagerDuty
+                                      ↓
+                                  Firestore (alert state)
+```
 
 ## Scripts
 
-- `npm run build` - Compile TypeScript
-- `npm run start` - Run compiled version
-- `npm run dev` - Run with ts-node for development
-- `npm run watch` - Watch mode compilation
+- `npm run build` - Compile TypeScript for deployment
+- `npm run start` - Run function locally with Functions Framework
+- `npm run dev` - Run function locally in development mode
+- `npm run deploy` - Deploy function to Google Cloud
 - `npm run lint` - Lint the code
 - `npm run typecheck` - Type check without emitting
 
@@ -179,3 +278,19 @@ Service logs are written to:
 - Add test user email in OAuth consent screen
 - Verify redirect URIs match exactly
 - Ensure all required scopes are configured
+
+**PagerDuty errors:**
+- Verify Integration Key is correct (from Events API v2 integration)
+- Check PagerDuty service is active and properly configured
+- Ensure network connectivity to PagerDuty API endpoints
+
+**Cloud Function errors:**
+- Check function logs: `gcloud functions logs read humidity-monitor`
+- Verify environment variables are set correctly
+- Ensure Firestore database is created and accessible
+- Check IAM permissions for Cloud Functions service account
+
+**Cost optimization:**
+- Monitor usage in Google Cloud Console
+- Adjust scheduler frequency if needed
+- Consider using Cloud Monitoring for alerting instead of frequent checks

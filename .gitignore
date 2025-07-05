@@ -39,3 +39,9 @@ coverage/
 
 # Temporary files
 get-refresh-token.sh
+
+# Cloud Functions
+.env.yaml
+
+# macOS daemon files (no longer used)
+humidity-daemon.plist

@@ -57,10 +57,12 @@ export class NestClient {
       for (const device of response.data.devices || []) {
         const humidityTrait = device.traits['sdm.devices.traits.Humidity'];
         if (humidityTrait) {
+          // Extract device ID from the full path (e.g., "enterprises/.../devices/ID" -> "ID")
+          const deviceId = device.name ? device.name.split('/').pop() : `device-${Math.random().toString(36).substr(2, 9)}`;
           readings.push({
             value: humidityTrait.ambientHumidityPercent,
             timestamp,
-            deviceId: device.deviceId,
+            deviceId: deviceId || `device-${Math.random().toString(36).substr(2, 9)}`,
           });
         }
       }

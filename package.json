@@ -5,27 +5,32 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "watch": "tsc -w",
+    "start": "functions-framework --target=humidityMonitor",
+    "dev": "functions-framework --target=humidityMonitor --source=src",
+    "deploy": "gcloud functions deploy humidity-monitor --runtime nodejs20 --trigger-http --allow-unauthenticated --source . --entry-point humidityMonitor --memory 256MB --timeout 60s --env-vars-file .env.yaml",
     "lint": "eslint src/**/*.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gcp-build": "echo 'Using pre-built files'"
   },
   "keywords": ["humidity", "daemon", "nest", "monitoring"],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "node-cron": "^3.0.3",
+    "@google-cloud/functions-framework": "^3.3.0",
+    "@google-cloud/firestore": "^7.1.0",
     "axios": "^1.6.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "@pagerduty/pdjs": "^2.2.4"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "@types/node-cron": "^3.0.11",
     "typescript": "^5.3.0",
     "ts-node": "^10.9.0",
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
     "eslint": "^8.55.0"
+  },
+  "engines": {
+    "node": "20"
   }
 }
